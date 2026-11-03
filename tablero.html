@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0c0e">
+<title>Tablero de Salidas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+[hidden]{display:none!important}
+
+/* Layout: one dark Solari housing. Header (title + big clock), departures grid, notice ticker inside the housing, quiet control strip below. Single dark look by design. */
+:root{
+  color-scheme: dark;
+  --bg:#0b0c0e;
+  --housing:#141518;
+  --rim:#26282d;
+  --flap:#1e2024;
+  --flap-hi:#272a2f;
+  --flap-lo:#191b1e;
+  --hinge:#060607;
+  --ink:#efe9db;
+  --muted:#8f8b82;
+  --dim:#6c6963;
+  --amber:#f2b632;
+  --ok:#86d394;
+  --live:#93c8ff;
+  --warn:#ff9f43;
+  --bad:#ff6e61;
+  --f-flap:'Barlow Condensed','Arial Narrow','Helvetica Neue',sans-serif;
+  --f-ui:'Barlow',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);-webkit-font-smoothing:antialiased}
+.app{box-sizing:border-box;min-height:100%;max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:clamp(14px,2.2vw,26px);padding-block:clamp(14px,2.4vw,30px);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* Header */
+.head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 28px}
+.ident{display:flex;flex-direction:column;gap:12px;min-width:0}
+.title{display:flex;align-items:center;gap:clamp(10px,1.4vw,16px)}
+.title svg{width:clamp(30px,4.2vw,52px);height:auto;color:var(--amber);flex:none}
+.title-text{display:flex;flex-direction:column;gap:4px}
+.es{margin:0;font-family:var(--f-flap);font-weight:700;font-size:clamp(34px,5.6vw,72px);line-height:.88;letter-spacing:.05em;text-transform:uppercase;color:var(--amber)}
+.en{font-size:clamp(11px,1.2vw,14px);font-weight:500;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+.clock{--cw:clamp(34px,6.6vw,88px);--g:clamp(3px,.4vw,5px)}
+.date{--cw:clamp(14px,1.9vw,25px);--g:2px;display:flex;flex-wrap:wrap;gap:calc(var(--cw)*.9)}
+#wx{color:var(--amber)}
+.line{display:flex;gap:var(--g)}
+
+/* Split-flap cell */
+.flap{--ch:calc(var(--cw)*1.42);--r:max(2px,calc(var(--cw)*.09));position:relative;flex:none;width:var(--cw);height:var(--ch);perspective:calc(var(--ch)*5);font-family:var(--f-flap);font-weight:600;font-size:calc(var(--ch)*.74);color:inherit;user-select:none}
+.flap .up,.flap .dn,.flap .fu,.flap .fd{position:absolute;left:0;right:0;height:50%;overflow:hidden}
+.flap .up,.flap .fu{top:0;background:linear-gradient(var(--flap-hi),var(--flap));border-radius:var(--r) var(--r) 0 0}
+.flap .dn,.flap .fd{bottom:0;background:var(--flap-lo);border-radius:0 0 var(--r) var(--r)}
+.flap b{position:absolute;left:0;right:0;height:200%;display:flex;align-items:center;justify-content:center;font-weight:inherit;line-height:1}
+.flap .up b,.flap .fu b{top:0}
+.flap .dn b,.flap .fd b{bottom:0}
+.flap .fu,.flap .fd{visibility:hidden;z-index:2;backface-visibility:hidden}
+.flap .fu{transform-origin:50% 100%}
+.flap .fd{transform-origin:50% 0;transform:rotateX(90deg)}
+.flap::after{content:"";position:absolute;left:0;right:0;top:calc(50% - .5px);height:1px;background:var(--hinge);z-index:3}
+
+/* Board housing */
+.board{--cw:20px;--g:2px;--sg:14px;background:var(--housing);border:1px solid var(--rim);border-radius:10px;padding:clamp(12px,1.8vw,22px);display:flex;flex-direction:column;gap:clamp(10px,1.4vw,16px);min-width:0}
+.colhead{display:flex;gap:var(--sg);align-items:flex-end}
+.ch{display:flex;flex-direction:column;gap:2px;flex:none;min-width:0;overflow:hidden}
+.ch-es{font-size:clamp(11px,1.15vw,14px);font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--amber);white-space:nowrap}
+.ch-en{font-size:clamp(9px,.9vw,11px);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.rows{display:flex;flex-direction:column;gap:calc(var(--cw)*.34)}
+.row{display:flex;gap:var(--sg);color:var(--ink)}
+.seg{display:flex;gap:var(--g);flex:none}
+.row[data-s="closed"],.row[data-s="tomorrow"] .st{color:var(--dim)}
+.row[data-s="ok"] .st{color:var(--ok)}
+.row[data-s="board"] .st{color:var(--amber);animation:pulse 1.8s ease-in-out infinite}
+.row[data-s="live"] .st{color:var(--live)}
+.row[data-s="warn"] .st{color:var(--warn)}
+.row[data-s="bad"] .st{color:var(--bad)}
+.row[data-s="bad"] .ds{color:var(--muted)}
+@keyframes pulse{50%{opacity:.45}}
+.rule{height:1px;background:var(--rim)}
+.notice-label{display:flex;gap:10px;align-items:baseline}
+.ticker{display:flex;flex-direction:column;gap:calc(var(--cw)*.34)}
+.ticker-row{display:flex;gap:var(--g)}
+
+/* Control strip */
+.bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 20px}
+.source{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:13px;color:var(--muted);min-width:0}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim);flex:none}
+.dot[data-k="ok"]{background:var(--ok)}
+.dot[data-k="loading"]{background:var(--amber)}
+.dot[data-k="err"],.dot[data-k="ask"]{background:var(--warn)}
+.source-text{min-width:0}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn{font:600 12px/1 var(--f-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--ink);background:transparent;border:1px solid var(--rim);border-radius:4px;padding:11px 14px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.btn[aria-pressed="true"]{border-color:var(--amber);color:var(--amber)}
+.btn.solid{background:var(--amber);border-color:var(--amber);color:var(--bg)}
+.btn.small{padding:8px 11px;font-size:11px}
+:fullscreen .bar{opacity:.35;transition:opacity .2s}
+:fullscreen .bar:hover,:fullscreen .bar:focus-within{opacity:1}
+
+/* Editor */
+.editor{background:var(--housing);border:1px solid var(--rim);border-radius:10px;padding:clamp(14px,2vw,22px);display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px 24px}
+.field{display:flex;flex-direction:column;gap:8px;min-width:0}
+.field label{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+.hint{margin:0;font-size:13px;line-height:1.5;color:var(--muted);max-width:62ch}
+.hint code{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:var(--ink)}
+.url{box-sizing:border-box;width:100%;font:14px/1.4 ui-monospace,'SF Mono',Menlo,Consolas,monospace;color:var(--ink);background:var(--bg);border:1px solid var(--rim);border-radius:6px;padding:10px 12px}
+textarea{box-sizing:border-box;width:100%;min-height:190px;resize:vertical;font:14px/1.6 ui-monospace,'SF Mono',Menlo,Consolas,monospace;color:var(--ink);background:var(--bg);border:1px solid var(--rim);border-radius:6px;padding:10px 12px}
+.check{display:flex;gap:10px;align-items:center;font-size:14px;color:var(--ink)}
+.check input{width:18px;height:18px;accent-color:var(--amber)}
+.field .check{font-size:14px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--ink)}
+.flabel{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+.checks{display:flex;flex-wrap:wrap;gap:10px 18px}
+.editor-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion: reduce){.row[data-s="board"] .st{animation:none}}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="head">
+    <div class="ident">
+      <div class="title">
+        <svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M4 39h40" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M7.5 27.5l5.2-2.1 4.6 3.4 7.8-3.1-9.4-10.3 4.1-1.6 14.3 7.5 6.6-2.6c2.2-.9 4.6.2 5.1 2.1.4 1.6-.6 3.1-2.3 3.8L14.9 35.4c-1.6.6-3.4.1-4.4-1.2z" fill="currentColor"/></svg>
+        <div class="title-text">
+          <h1 class="es">Salidas</h1>
+          <span class="en">Departures</span>
+        </div>
+      </div>
+      <div class="date"><div class="line" id="date"></div><div class="line" id="wx" hidden></div></div>
+    </div>
+    <div class="clock" role="timer" aria-live="off"><div class="line" id="clock"></div><span class="sr" id="clock-sr"></span></div>
+  </header>
+
+  <section class="board" id="board" aria-label="Tablero de salidas">
+    <div class="colhead" id="colhead"></div>
+    <div class="rows" id="rows"></div>
+    <div class="rule"></div>
+    <div class="notice-label"><span class="ch-es" id="sec-es">Avisos</span><span class="ch-en" id="sec-en">Notices</span></div>
+    <div class="ticker" id="ticker" aria-live="polite"></div>
+  </section>
+
+  <div class="bar">
+    <div class="source">
+      <span class="dot" id="dot"></span>
+      <span class="source-text" id="source-text">Itinerario manual</span>
+      <button class="btn small solid" id="btn-ask" type="button" hidden>Leer mi calendario</button>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btn-edit" type="button" aria-expanded="false" aria-controls="editor">Editar</button>
+      <button class="btn" id="btn-sound" type="button" aria-pressed="false">Sonido</button>
+      <button class="btn" id="btn-wake" type="button" aria-pressed="false">Pantalla encendida</button>
+      <button class="btn" id="btn-full" type="button">Pantalla completa</button>
+    </div>
+  </div>
+
+  <section class="editor" id="editor" hidden aria-label="Editar tablero">
+    <div class="field">
+      <label for="f-rows">Itinerario manual</label>
+      <textarea id="f-rows" spellcheck="false"></textarea>
+      <p class="hint">Una salida por línea: <code>HORA | DESTINO | PUERTA | ESTADO</code>. El estado es opcional; si lo dejas vacío se calcula solo (en hora, embarque, en curso, cerrado). Puedes forzar <code>DEMORADO</code> o <code>CANCELADO</code>.</p>
+    </div>
+    <div class="field">
+      <label for="f-msgs">Avisos</label>
+      <textarea id="f-msgs" spellcheck="false"></textarea>
+      <p class="hint">Un aviso por línea. <code>{proxima}</code> muestra la próxima salida y <code>{finde}</code> cuánto falta para el sábado. Los eventos de día completo de tu calendario aparecen aquí solos.</p>
+      <label class="check" for="f-cal"><input type="checkbox" id="f-cal"> Usar Google Calendar cuando esté disponible</label>
+      <label for="f-feed">URL de eventos</label>
+      <input class="url" id="f-feed" type="url" placeholder="https://tu-app.onrender.com/api/board/events?key=…" spellcheck="false">
+      <p class="hint">Opcional. Un endpoint que devuelva <code>{"events": [...]}</code> con el formato de Google Calendar. Se consulta cada 3 minutos mientras el tablero está a la vista.</p>
+    </div>
+    <div class="field">
+      <span class="flabel">Noticiero</span>
+      <div class="checks" id="f-secs"></div>
+      <span class="flabel">Titulares</span>
+      <div class="checks" id="f-topics"></div>
+      <p class="hint">Clima, mercados, titulares y "un día como hoy" llegan desde tu script de Apps Script. Entrenamiento sale de tu calendario y los avisos son los que escribes aquí.</p>
+    </div>
+    <div class="editor-actions">
+      <button class="btn" id="btn-example" type="button">Restaurar ejemplo</button>
+      <button class="btn" id="btn-cancel" type="button">Cancelar</button>
+      <button class="btn solid" id="btn-save" type="button">Guardar</button>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var CH = " ABCDEFGHIJKLMNÑOPQRSTUVWXYZ0123456789:.-/'&!?,+#()°%$";
+  var N_ROWS = 6, TIME_LEN = 5, GATE_LEN = 8, ST_LEN = 9;
+  var SERVER = "Google Calendar";
+  var DAYS = ["DOM","LUN","MAR","MIE","JUE","VIE","SAB"];
+  var SECS = [
+    ["entreno","Entrenamiento","Training"],
+    ["clima","Clima","Weather"],
+    ["mercados","Mercados","Markets"],
+    ["titulares","Titulares","Headlines"],
+    ["efemeride","Un día como hoy","On this day"],
+    ["avisos","Avisos","Notices"]
+  ];
+  var TOPICS = [["CHILE","Chile"],["MUNDO","Mundo"],["ECONOMIA","Economía"],["TECNOLOGIA","Tecnología"],["DEPORTES","Deportes"],["CIENCIA","Ciencia"]];
+  var TRAIN = /\b(carreras?|trote|rodaje|bici\w*|ciclismo|rodillo|nado|nataci[oó]n|piscina|swim\w*|bike|run|running|umbral|intervalos?|gimnasio|gym|fuerza|entreno|entrenamiento)\b/i;
+  function secInfo(k){ for (var i = 0; i < SECS.length; i++) if (SECS[i][0] === k) return SECS[i]; return SECS[SECS.length-1]; }
+  function topicName(k){ for (var i = 0; i < TOPICS.length; i++) if (TOPICS[i][0] === k) return TOPICS[i][1]; return k; }
+  var MONTHS = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
+  var reduce = window.matchMedia ? matchMedia("(prefers-reduced-motion: reduce)") : {matches:false};
+  function $(s){ return document.querySelector(s); }
+  function pad(n){ return (n < 10 ? "0" : "") + n; }
+  function hm(d){ return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+  function dayKey(d){ return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()); }
+  function sameDay(a,b){ return dayKey(a) === dayKey(b); }
+  function norm(s){
+    s = String(s || "").toUpperCase().replace(/Ñ/g, "\u0001").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\u0001/g, "Ñ");
+    var o = ""; for (var i = 0; i < s.length; i++){ var c = s[i]; o += CH.indexOf(c) >= 0 ? c : " "; }
+    return o.replace(/\s+/g, " ");
+  }
+  function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+  function disp(c){ return c === " " ? " " : c; }
+
+  /* ---------- sound ---------- */
+  var audio = null, noiseBuf = null, soundOn = false, lastClick = 0;
+  function initAudio(){
+    if (audio) return;
+    var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    try {
+      audio = new AC();
+      var len = Math.floor(audio.sampleRate * 0.012);
+      noiseBuf = audio.createBuffer(1, len, audio.sampleRate);
+      var d = noiseBuf.getChannelData(0);
+      for (var i = 0; i < len; i++) d[i] = (Math.random()*2 - 1) * Math.pow(1 - i/len, 3);
+    } catch(e){ audio = null; }
+  }
+  function click(){
+    if (!soundOn || !audio) return;
+    var t = performance.now(); if (t - lastClick < 24) return; lastClick = t;
+    try {
+      var s = audio.createBufferSource(); s.buffer = noiseBuf;
+      var f = audio.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 1700 + Math.random()*900; f.Q.value = 1.3;
+      var g = audio.createGain(); g.gain.value = 0.16;
+      s.connect(f); f.connect(g); g.connect(audio.destination); s.start();
+    } catch(e){}
+  }
+
+  /* ---------- flap cell ---------- */
+  function Flap(){
+    var el = document.createElement("span");
+    el.className = "flap"; el.setAttribute("aria-hidden", "true");
+    el.innerHTML = '<span class="up"><b></b></span><span class="dn"><b></b></span><span class="fu"><b></b></span><span class="fd"><b></b></span>';
+    var k = el.children;
+    this.el = el; this.up = k[0].firstChild; this.dn = k[1].firstChild;
+    this.fuEl = k[2]; this.fdEl = k[3]; this.fu = k[2].firstChild; this.fd = k[3].firstChild;
+    this.cur = " "; this.target = " "; this.running = false; this.delay = 0;
+    this.paint(" ");
+  }
+  Flap.prototype.paint = function(c){ var d = disp(c); this.up.textContent = d; this.dn.textContent = d; };
+  Flap.prototype.set = function(c, instant){
+    if (CH.indexOf(c) < 0) c = " ";
+    this.target = c;
+    if (instant || reduce.matches || !this.el.animate){ this.cur = c; this.paint(c); return; }
+    if (!this.running) this.run();
+  };
+  Flap.prototype.run = async function(){
+    this.running = true;
+    try {
+      if (this.delay) await wait(this.delay);
+      var n = CH.length, k = 3 + Math.floor(Math.random()*5);
+      while (this.cur !== this.target){
+        var ti = CH.indexOf(this.target), ci = CH.indexOf(this.cur);
+        var dist = (ti - ci + n) % n;
+        var next = dist > k ? CH[(ti - k + n) % n] : CH[(ci + 1) % n];
+        await this.flip(this.cur, next);
+        this.cur = next;
+      }
+    } finally { this.running = false; }
+  };
+  Flap.prototype.flip = function(a, b){
+    var self = this, A = disp(a), B = disp(b), D = 46;
+    this.up.textContent = B; this.dn.textContent = A; this.fu.textContent = A; this.fd.textContent = B;
+    this.fuEl.style.visibility = "visible"; this.fdEl.style.visibility = "visible";
+    click();
+    function done(){
+      self.dn.textContent = B;
+      self.fuEl.style.visibility = ""; self.fdEl.style.visibility = "";
+      self.fuEl.getAnimations().forEach(function(x){ x.cancel(); });
+      self.fdEl.getAnimations().forEach(function(x){ x.cancel(); });
+    }
+    return this.fuEl.animate([{transform:"rotateX(0deg)"},{transform:"rotateX(-90deg)"}], {duration:D, easing:"ease-in", fill:"forwards"}).finished
+      .then(function(){ return self.fdEl.animate([{transform:"rotateX(90deg)"},{transform:"rotateX(0deg)"}], {duration:D, easing:"ease-out", fill:"forwards"}).finished; })
+      .then(done, done);
+  };
+
+  function Line(parent, len){
+    this.len = len; this.cells = [];
+    for (var i = 0; i < len; i++){ var f = new Flap(); parent.appendChild(f.el); this.cells.push(f); }
+  }
+  Line.prototype.write = function(s, instant, base, step){
+    s = (norm(s).trim() + " ".repeat(this.len)).slice(0, this.len);
+    base = base || 0; step = step == null ? 14 : step;
+    for (var i = 0; i < this.len; i++){ var c = this.cells[i]; c.delay = instant ? 0 : base + i*step; c.set(s[i], instant); }
+  };
+
+  /* ---------- state (per device) ---------- */
+  var KEY = "tablero-salidas.v1";
+  var EXAMPLE = {
+    rows: "07:00 | DESAYUNO | COCINA |\n09:00 | REUNIÓN EQUIPO | SALA 3 |\n11:30 | ENTRENAMIENTO | GIMNASIO |\n13:30 | ALMUERZO | CASINO |\n16:00 | BLOQUE ESTUDIO | BIBLIOTECA | DEMORADO\n19:30 | CENA | CASA |\n22:00 | LECTURA | LIVING |",
+    msgs: "BIENVENIDOS. MANTENGA SUS PERTENENCIAS A LA VISTA\nPRÓXIMA SALIDA: {proxima}\nSALIDA AL FIN DE SEMANA: {finde}\nPUERTAS CIERRAN 10 MINUTOS ANTES DE CADA SALIDA\nTOME AGUA. SERVICIO A BORDO CADA HORA",
+    useCal: true, example: true, feed: "",
+    sections: {entreno:true, clima:true, mercados:true, titulares:true, efemeride:true, avisos:true},
+    topics: ["CHILE","MUNDO","ECONOMIA","TECNOLOGIA","DEPORTES"]
+  };
+  function load(){
+    try { var v = JSON.parse(localStorage.getItem(KEY) || "null"); if (v && typeof v.rows === "string") return Object.assign({}, EXAMPLE, v); } catch(e){}
+    return Object.assign({}, EXAMPLE);
+  }
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+  var state = load();
+
+  /* ---------- data ---------- */
+  function parseManual(now){
+    var out = [];
+    state.rows.split("\n").forEach(function(line){
+      var p = line.split("|").map(function(x){ return x.trim(); });
+      var m = (p[0] || "").match(/^(\d{1,2})[:.h](\d{2})$/i);
+      if (!m || !p[1]) return;
+      var h = +m[1], mi = +m[2]; if (h > 23 || mi > 59) return;
+      var st = new Date(now); st.setHours(h, mi, 0, 0);
+      out.push({start:st, end:new Date(st.getTime() + 3600000), title:p[1], gate:p[2] || "", manual:p[3] || ""});
+    });
+    return out;
+  }
+  var calData = null, calStamp = null, calState = "off", calMsg = "";
+  function fromCal(payload){
+    var evs = payload && Array.isArray(payload.events) ? payload.events : [];
+    var items = [], allDay = [];
+    evs.forEach(function(e){
+      if (!e || e.status === "cancelled") return;
+      var s = e.start || {}, en = e.end || {}, title = e.summary || "Sin título";
+      if (s.dateTime){
+        var st = new Date(s.dateTime); if (isNaN(st)) return;
+        var end = en.dateTime ? new Date(en.dateTime) : new Date(st.getTime() + 3600000);
+        items.push({start:st, end:end, title:title, gate:String(e.location || "").split(",")[0].trim(), manual:"", desc:e.description || ""});
+      } else if (s.date){
+        allDay.push({date:s.date, title:title});
+      }
+    });
+    return {items:items, allDay:allDay, extras:{weather:payload.weather || null, markets:payload.markets || null, news:payload.news || null, fact:payload.fact || null}};
+  }
+  function currentItems(now){
+    if (state.useCal && calData) return {items:calData.items, src:"cal"};
+    return {items:parseManual(now), src:"manual"};
+  }
+  function statusOf(it, now){
+    if (it.manual){
+      var m = norm(it.manual).trim(), code = "manual";
+      if (/DEMOR|RETRAS|ATRAS/.test(m)) code = "warn";
+      else if (/CANCEL|ANUL|SUSPEND/.test(m)) code = "bad";
+      else if (/EMBAR/.test(m)) code = "board";
+      else if (/CURSO/.test(m)) code = "live";
+      else if (/CERR|FINAL/.test(m)) code = "closed";
+      else if (/HORA|OK/.test(m)) code = "ok";
+      return {code:code, label:m.slice(0, ST_LEN)};
+    }
+    var t = now.getTime(), s = it.start.getTime(), e = it.end.getTime();
+    if (e <= t) return {code:"closed", label:"CERRADO"};
+    if (s <= t) return {code:"live", label:"EN CURSO"};
+    if (!sameDay(it.start, now)) return {code:"tomorrow", label:"MAÑANA"};
+    if (s - t <= 30*60000) return {code:"board", label:"EMBARQUE"};
+    return {code:"ok", label:"EN HORA"};
+  }
+  function pick(items, now){
+    var all = items.map(function(it){ return Object.assign({}, it, statusOf(it, now)); })
+                   .sort(function(a,b){ return a.start - b.start; });
+    var open = all.filter(function(x){ return x.code !== "closed"; });
+    var closed = all.filter(function(x){ return x.code === "closed"; });
+    var rows = open.slice(0, N_ROWS), room = N_ROWS - rows.length;
+    if (room > 0 && closed.length) rows = closed.slice(-Math.min(2, room)).concat(rows);
+    return rows;
+  }
+
+  /* ---------- layout ---------- */
+  var L = null, rowLines = [], tickLines = [], tickIdx = 0;
+  var clockLine = new Line($("#clock"), 5);
+  var dateLine = new Line($("#date"), 10);
+  var wxLine = new Line($("#wx"), 4);
+  function layoutFor(W){
+    var target = W > 1150 ? 36 : W > 850 ? 28 : W > 600 ? 21 : 12;
+    var g = target >= 20 ? 2 : 1;
+    var showGate = W >= 600, segs = showGate ? 4 : 3;
+    var fixed = TIME_LEN + ST_LEN + (showGate ? GATE_LEN : 0), sgF = 0.7;
+    var total = Math.floor((W - (segs-1)*sgF*target + g) / (target + g));
+    var dest = Math.max(6, total - fixed), C = fixed + dest;
+    var cw = Math.floor(((W - (C - segs)*g) / (C + sgF*(segs-1))) * 4) / 4;
+    var tick = Math.floor((W + g) / (cw + g));
+    return {cw:cw, g:g, sg:cw*sgF, showGate:showGate, dest:dest, tick:tick, key:[cw,dest,showGate,tick].join("/")};
+  }
+  function build(){
+    var W = $("#rows").clientWidth; if (!W) return;
+    var nl = layoutFor(W); if (L && L.key === nl.key) return;
+    var first = !L; L = nl;
+    var b = $("#board");
+    b.style.setProperty("--cw", L.cw + "px"); b.style.setProperty("--g", L.g + "px"); b.style.setProperty("--sg", L.sg + "px");
+    function segW(n){ return (n*L.cw + (n-1)*L.g) + "px"; }
+    var heads = [["Hora","Time",TIME_LEN],["Destino","Destination",L.dest]];
+    if (L.showGate) heads.push(["Puerta","Gate",GATE_LEN]);
+    heads.push(["Estado","Status",ST_LEN]);
+    var ch = $("#colhead"); ch.textContent = "";
+    heads.forEach(function(h){
+      var d = document.createElement("div"); d.className = "ch"; d.style.width = segW(h[2]);
+      var a = document.createElement("span"); a.className = "ch-es"; a.textContent = h[0];
+      var e = document.createElement("span"); e.className = "ch-en"; e.textContent = h[1];
+      d.appendChild(a); d.appendChild(e); ch.appendChild(d);
+    });
+    var rows = $("#rows"); rows.textContent = ""; rowLines = [];
+    for (var r = 0; r < N_ROWS; r++){
+      var row = document.createElement("div"); row.className = "row"; row.setAttribute("role", "listitem");
+      var mk = function(cls, n){ var s = document.createElement("div"); s.className = "seg " + cls; row.appendChild(s); return new Line(s, n); };
+      var o = {el:row, time:mk("tm", TIME_LEN), dest:mk("ds", L.dest), gate:L.showGate ? mk("gt", GATE_LEN) : null, st:mk("st", ST_LEN)};
+      rows.appendChild(row); rowLines.push(o);
+    }
+    rows.setAttribute("role", "list");
+    var tk = $("#ticker"); tk.textContent = ""; tickLines = [];
+    for (var t = 0; t < 2; t++){ var tr = document.createElement("div"); tr.className = "ticker-row"; tk.appendChild(tr); tickLines.push(new Line(tr, L.tick)); }
+    renderBoard(!first); renderTicker(!first);
+  }
+
+  /* ---------- render ---------- */
+  function renderClock(instant){
+    var now = new Date();
+    clockLine.write(hm(now), instant, 0, 60);
+    dateLine.write(DAYS[now.getDay()] + " " + pad(now.getDate()) + " " + MONTHS[now.getMonth()], instant, 120, 18);
+    $("#clock-sr").textContent = hm(now);
+  }
+  function extras(){ return (state.useCal && calData && calData.extras) || {}; }
+  function renderWx(){
+    var w = extras().weather, box = $("#wx");
+    if (!w || w.now == null){ box.hidden = true; return; }
+    box.hidden = false; wxLine.write(w.now + "°C", false, 200, 18);
+  }
+  function renderBoard(instant){
+    renderWx();
+    if (!L) return;
+    var now = new Date(), cur = currentItems(now), rows = pick(cur.items, now);
+    rowLines.forEach(function(o, i){
+      var it = rows[i], base = i*55;
+      if (!it){
+        o.el.dataset.s = ""; o.el.removeAttribute("aria-label");
+        o.time.write("", instant, base); o.dest.write("", instant, base+40);
+        if (o.gate) o.gate.write("", instant, base+80); o.st.write("", instant, base+120);
+        return;
+      }
+      o.el.dataset.s = it.code;
+      var t = hm(it.start);
+      o.time.write(t, instant, base);
+      o.dest.write(it.title, instant, base+40);
+      if (o.gate) o.gate.write(it.gate, instant, base+80);
+      o.st.write(it.label, instant, base+120);
+      o.el.setAttribute("aria-label", t + " " + it.title + (it.gate ? ", " + it.gate : "") + ": " + it.label);
+    });
+    renderSource(cur.src);
+  }
+  function fillTokens(m, now){
+    return m.replace(/\{finde\}/ig, function(){
+      var d = now.getDay(); if (d === 6 || d === 0) return "HOY";
+      var n = 6 - d; return n + (n === 1 ? " DÍA" : " DÍAS");
+    }).replace(/\{proxima\}/ig, function(){
+      var items = currentItems(now).items.filter(function(i){ return i.start > now; }).sort(function(a,b){ return a.start - b.start; });
+      return items.length ? hm(items[0].start) + " " + items[0].title : "SIN SALIDAS PENDIENTES";
+    });
+  }
+  function fmtNum(v, dec){ return Number(v).toLocaleString("es-CL", {minimumFractionDigits:dec, maximumFractionDigits:dec}); }
+  function fmtPct(c){ return c == null ? "" : " " + (c > 0 ? "+" : "") + fmtNum(c, 1) + "%"; }
+  function messages(now){
+    var on = state.sections || {}, x = extras(), out = [];
+    function add(sec, t){ if (t) out.push({sec:sec, text:t}); }
+    if (on.entreno){
+      currentItems(now).items
+        .filter(function(i){ return TRAIN.test(i.title) && i.end > now; })
+        .sort(function(a,b){ return a.start - b.start; }).slice(0, 2)
+        .forEach(function(i){
+          var d = String(i.desc || "").replace(/^\s*TrainingPeaks:\s*/i, "");
+          add("entreno", (sameDay(i.start, now) ? "HOY " : "MAÑANA ") + hm(i.start) + " " + i.title + (d ? ". " + d : ""));
+        });
+    }
+    if (on.clima && x.weather){
+      var w = x.weather, t = w.today || {}, m = w.tomorrow || {};
+      add("clima", w.city + " " + w.now + "° AHORA, " + w.nowDesc + ". MÁX " + t.max + "° MÍN " + t.min + "°" + (t.rain != null ? ". LLUVIA " + t.rain + "%" : ""));
+      if (m.max != null) add("clima", "MAÑANA " + m.desc + ". MÁX " + m.max + "° MÍN " + m.min + "°" + (m.rain != null ? ". LLUVIA " + m.rain + "%" : ""));
+    }
+    if (on.mercados && x.markets && x.markets.length){
+      var parts = x.markets.map(function(k){ return k.name + " " + (k.prefix || "") + fmtNum(k.value, k.dec || 0) + fmtPct(k.change); });
+      for (var i = 0; i < parts.length; i += 3) add("mercados", parts.slice(i, i + 3).join(" / "));
+    }
+    if (on.titulares && x.news){
+      x.news.forEach(function(n){ add("titulares", topicName(n.topic) + ": " + n.title); });
+    }
+    if (on.efemeride && x.fact) add("efemeride", x.fact.year + ": " + x.fact.text);
+    if (on.avisos){
+      if (state.useCal && calData){
+        var k = dayKey(now);
+        calData.allDay.forEach(function(a){ if (a.date === k) add("avisos", "HOY: " + a.title); });
+      }
+      state.msgs.split("\n").map(function(s){ return s.trim(); }).filter(Boolean).forEach(function(m){ add("avisos", fillTokens(m, now)); });
+    }
+    return out.length ? out : [{sec:"avisos", text:"BUEN VIAJE"}];
+  }
+  function paginate(list, len){
+    var pages = [];
+    list.forEach(function(m){
+      var lines = [], cur = "";
+      norm(m.text).split(" ").filter(Boolean).forEach(function(w){
+        if (w.length > len) w = w.slice(0, len);
+        if (!cur) cur = w;
+        else if ((cur + " " + w).length <= len) cur += " " + w;
+        else { lines.push(cur); cur = w; }
+      });
+      if (cur) lines.push(cur);
+      for (var i = 0; i < lines.length; i += 2) pages.push({sec:m.sec, lines:[lines[i], lines[i + 1] || ""]});
+    });
+    return pages;
+  }
+  function renderTicker(instant){
+    if (!tickLines.length) return;
+    var pages = paginate(messages(new Date()), L.tick); if (!pages.length) return;
+    tickIdx = tickIdx % pages.length;
+    var p = pages[tickIdx], s = secInfo(p.sec);
+    tickLines[0].write(p.lines[0], instant, 0, 10);
+    tickLines[1].write(p.lines[1], instant, 160, 10);
+    $("#sec-es").textContent = s[1]; $("#sec-en").textContent = s[2];
+  }
+  function renderSource(src){
+    var dot = $("#dot"), txt = $("#source-text"), ask = $("#btn-ask");
+    ask.hidden = calState !== "ask";
+    var tag = state.example ? " (ejemplo)" : "";
+    if (src === "cal"){
+      dot.dataset.k = calState === "stale" ? "err" : "ok";
+      txt.textContent = (calState === "stale" ? calMsg : "Google Calendar · actualizado " + (calStamp ? hm(new Date(calStamp)) : "ahora"));
+    } else if (calState === "loading"){
+      dot.dataset.k = "loading"; txt.textContent = "Leyendo tu calendario… mientras tanto, itinerario manual" + tag;
+    } else if (calState === "err" || calState === "ask"){
+      dot.dataset.k = calState; txt.textContent = calMsg + " Mostrando itinerario manual" + tag + ".";
+    } else {
+      dot.dataset.k = ""; txt.textContent = "Itinerario manual" + tag;
+    }
+  }
+
+  /* ---------- Google Calendar (viewer's connector) ---------- */
+  var mcp = null, unwatch = null, watchDay = "";
+  function calInput(now){
+    var t = new Date(now); t.setDate(t.getDate() + 1);
+    return {startTime:dayKey(now) + "T00:00:00", endTime:dayKey(t) + "T23:59:00", orderBy:"startTime", pageSize:40};
+  }
+  function setCal(s, msg){ calState = s; calMsg = msg || ""; renderSource(currentItems(new Date()).src); }
+  function onCalData(res){
+    calData = fromCal(res && res.payload);
+    calStamp = (res && res.cache && res.cache.storedAt) || Date.now();
+    setCal("ok"); renderBoard(false); renderTicker(false);
+  }
+  var DENY = ["needs_reauth","server_not_connected","selection_required","blocked_by_policy","approval_required","not_in_manifest","consent_required","not_granted","capability_disabled","capability_removed"];
+  function onCalError(err){
+    var code = err && err.code;
+    if (DENY.indexOf(code) >= 0 && calData){ calData = null; renderBoard(false); }
+    switch (code){
+      case "needs_reauth": setCal("err", "Reconecta Google Calendar en claude.ai, en Configuración › Conectores."); break;
+      case "server_not_connected": setCal("err", "Agrega Google Calendar en claude.ai, en Configuración › Conectores."); break;
+      case "selection_required": setCal("err", "Elige qué cuenta de Google Calendar usar en el aviso de claude.ai."); break;
+      case "approval_required": case "consent_required": setCal("ask", "El tablero necesita tu permiso para leer el calendario."); break;
+      case "not_in_manifest": setCal("err", "El calendario no está permitido para esta página; puedes activarlo en los permisos del artifact."); break;
+      case "blocked_by_policy": setCal("err", "Tu organización bloquea la lectura del calendario."); break;
+      case "not_granted": case "capability_disabled": case "capability_removed": setCal("off"); break;
+      default:
+        if (calData) setCal("stale", "No se pudo actualizar el calendario; última lectura " + (calStamp ? hm(new Date(calStamp)) : "") + ".");
+        else setCal("err", "No se pudo leer el calendario.");
+    }
+  }
+  function startWatch(){
+    if (!mcp || !state.useCal) return;
+    stopWatch();
+    var now = new Date(); watchDay = dayKey(now);
+    if (!calData) setCal("loading");
+    try {
+      unwatch = mcp.watchTool(SERVER, "list_events", calInput(now), function(ev){
+        if (ev.type === "data") onCalData(ev.result); else onCalError(ev.error);
+      }, {refetchInterval: 5*60000, cache:{staleTime:60000, gcTime:86400000}});
+    } catch(e){ setCal("off"); }
+  }
+  function stopWatch(){ if (unwatch){ try { unwatch(); } catch(e){} unwatch = null; } }
+  async function askCal(){
+    if (!mcp) return;
+    setCal("loading");
+    try { onCalData(await mcp.callTool(SERVER, "list_events", calInput(new Date()), {cache:{staleTime:60000, gcTime:86400000}})); startWatch(); }
+    catch(e){ onCalError(e); }
+  }
+  $("#btn-ask").addEventListener("click", askCal);
+
+  /* ---------- outside Claude: JSON feed ---------- */
+  var feedTimer = null, FEED_MS = 180000;
+  function feedUrl(){
+    var on = state.sections || {};
+    var secs = ["clima","mercados","titulares","efemeride"].filter(function(k){ return on[k]; });
+    var u = state.feed + (state.feed.indexOf("?") >= 0 ? "&" : "?") + "sections=" + secs.join(",");
+    if (on.titulares) u += "&topics=" + (state.topics || []).join(",");
+    return u;
+  }
+  async function pullFeed(){
+    if (!state.useCal || !state.feed) return;
+    if (document.visibilityState === "hidden") return;
+    if (!calData) setCal("loading");
+    try {
+      var r = await fetch(feedUrl(), {cache:"no-store"});
+      if (r.status === 401 || r.status === 403){ calData = null; setCal("err", "La URL de eventos rechazó el acceso; revisa la clave."); renderBoard(false); return; }
+      if (!r.ok) throw new Error(r.status);
+      var data = await r.json();
+      if (data && data.error){ calData = null; setCal("err", "La URL de eventos rechazó el acceso; revisa la clave."); renderBoard(false); return; }
+      onCalData({payload: data});
+    } catch(e){
+      if (calData) setCal("stale", "No se pudo actualizar la URL de eventos; última lectura " + (calStamp ? hm(new Date(calStamp)) : "") + ".");
+      else setCal("err", "No se pudo leer la URL de eventos.");
+    }
+  }
+  function startFeed(){
+    if (feedTimer){ clearInterval(feedTimer); feedTimer = null; }
+    if (!state.useCal || !state.feed || mcp) return;
+    pullFeed(); feedTimer = setInterval(pullFeed, FEED_MS);
+  }
+  if (window.claude && typeof window.claude.use === "function"){
+    window.claude.use("mcp").then(function(m){ mcp = m; if (m) startWatch(); else { setCal("off"); startFeed(); } }, function(){ setCal("off"); startFeed(); });
+  } else startFeed();
+
+  /* ---------- controls ---------- */
+  var ed = $("#editor"), btnEdit = $("#btn-edit");
+  function checkbox(id, label, on){
+    var l = document.createElement("label"); l.className = "check"; l.htmlFor = id;
+    var i = document.createElement("input"); i.type = "checkbox"; i.id = id; i.checked = !!on;
+    l.appendChild(i); l.appendChild(document.createTextNode(" " + label)); return l;
+  }
+  function fillEditor(src){
+    $("#f-rows").value = src.rows; $("#f-msgs").value = src.msgs; $("#f-cal").checked = !!src.useCal; $("#f-feed").value = src.feed || "";
+    var secs = $("#f-secs"), tps = $("#f-topics"), on = src.sections || {}, tp = src.topics || [];
+    secs.textContent = ""; tps.textContent = "";
+    SECS.forEach(function(s){ secs.appendChild(checkbox("sec-" + s[0], s[1], on[s[0]])); });
+    TOPICS.forEach(function(t){ tps.appendChild(checkbox("top-" + t[0], t[1], tp.indexOf(t[0]) >= 0)); });
+  }
+  function closeEditor(){ ed.hidden = true; btnEdit.setAttribute("aria-expanded", "false"); }
+  btnEdit.addEventListener("click", function(){
+    if (ed.hidden){ fillEditor(state); ed.hidden = false; btnEdit.setAttribute("aria-expanded", "true"); $("#f-rows").focus(); }
+    else closeEditor();
+  });
+  $("#btn-cancel").addEventListener("click", closeEditor);
+  $("#btn-example").addEventListener("click", function(){ fillEditor(Object.assign({}, EXAMPLE, {feed: $("#f-feed").value, useCal: $("#f-cal").checked})); });
+  $("#btn-save").addEventListener("click", function(){
+    var rows = $("#f-rows").value, msgs = $("#f-msgs").value;
+    state.example = rows === EXAMPLE.rows && msgs === EXAMPLE.msgs;
+    state.rows = rows; state.msgs = msgs; state.useCal = $("#f-cal").checked; state.feed = $("#f-feed").value.trim();
+    state.sections = {}; SECS.forEach(function(s){ state.sections[s[0]] = $("#sec-" + s[0]).checked; });
+    state.topics = TOPICS.filter(function(t){ return $("#top-" + t[0]).checked; }).map(function(t){ return t[0]; });
+    save(); closeEditor();
+    if (state.useCal){ if (mcp){ if (!unwatch) startWatch(); } else { calData = null; setCal("off"); startFeed(); } }
+    else { stopWatch(); startFeed(); calData = null; setCal("off"); }
+    tickIdx = 0; renderBoard(false); renderTicker(false);
+  });
+
+  var btnSound = $("#btn-sound");
+  btnSound.addEventListener("click", function(){
+    initAudio();
+    if (!audio){ btnSound.disabled = true; return; }
+    try { audio.resume(); } catch(e){}
+    soundOn = !soundOn; btnSound.setAttribute("aria-pressed", String(soundOn));
+  });
+
+  var btnFull = $("#btn-full");
+  if (!document.fullscreenEnabled || !document.documentElement.requestFullscreen) btnFull.hidden = true;
+  btnFull.addEventListener("click", function(){
+    var p = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    if (p && p.catch) p.catch(function(){ btnFull.hidden = true; });
+  });
+  document.addEventListener("fullscreenchange", function(){ btnFull.textContent = document.fullscreenElement ? "Salir" : "Pantalla completa"; });
+
+  var btnWake = $("#btn-wake"), wakeLock = null, wantWake = false;
+  if (!("wakeLock" in navigator)) btnWake.hidden = true;
+  function syncWake(){ btnWake.setAttribute("aria-pressed", String(!!(wantWake && wakeLock))); }
+  async function reqWake(){
+    try { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", function(){ wakeLock = null; syncWake(); }); }
+    catch(e){ wakeLock = null; wantWake = false; btnWake.hidden = true; }
+    syncWake();
+  }
+  btnWake.addEventListener("click", function(){
+    wantWake = !wantWake;
+    if (wantWake) reqWake(); else { if (wakeLock) wakeLock.release().catch(function(){}); wakeLock = null; syncWake(); }
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if (document.visibilityState !== "visible") return;
+    if (wantWake && !wakeLock) reqWake();
+    renderClock(false); renderBoard(false);
+    if (feedTimer) pullFeed();
+  });
+
+  /* ---------- clocks ---------- */
+  var lastMin = -1;
+  setInterval(function(){
+    var now = new Date(), m = now.getHours()*60 + now.getMinutes();
+    if (m === lastMin) return; lastMin = m;
+    renderClock(false); renderBoard(false);
+    if (mcp && state.useCal && dayKey(now) !== watchDay) startWatch();
+  }, 1000);
+  setInterval(function(){ tickIdx++; renderTicker(false); }, 8000);
+
+  if (window.ResizeObserver) new ResizeObserver(function(){ build(); }).observe($("#board"));
+  else window.addEventListener("resize", build);
+  renderClock(false);
+  lastMin = new Date().getHours()*60 + new Date().getMinutes();
+  build();
+})();
+</script>
+
+</body>
+</html>
